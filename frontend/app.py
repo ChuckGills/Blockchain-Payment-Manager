@@ -9,8 +9,8 @@ load_dotenv()
 
 # Configure page settings
 st.set_page_config(
-    page_title="Midnight Wallet Dashboard",
-    page_icon="💰",
+    page_title="Midnight Dashboard",
+    
     layout="wide"
 )
 
@@ -24,7 +24,7 @@ if "wallet_address" not in st.session_state:
     st.session_state.wallet_address = None
 
 # Page title
-st.title("Decentralized Payment Protector Dashboard")
+st.title("Midnight Secure Payment HUB")
 
 # --------------------------
 # Sidebar: Wallet Connection via Midnight Wallet
@@ -88,7 +88,7 @@ with st.sidebar:
                         
         elif connection_option == "Connect wallet":
             with st.form("seed_form"):
-                seed = st.text_input("Enter Seed Phrase", type="password")
+                seed = st.text_input("Enter Wallet Addr", type="password")
                 submit = st.form_submit_button("Connect")
                 
                 if submit and seed:
@@ -134,49 +134,106 @@ with st.sidebar:
 if st.session_state.wallet_address:
     st.success("Wallet connected successfully!")
     
-    # Create tabs for different functionality
     tab1, tab2, tab3 = st.tabs(["Send Transaction", "Escrow", "Wallet Management"])
     
     with tab1:
         st.header("Send Transaction")
-        
-        with st.form("send_form"):
-            recipient = st.text_input("Recipient Address")
-            amount = st.number_input("Amount (tDUST)", min_value=0.000001, value=1.0, step=0.1, format="%.6f")
-            memo = st.text_input("Memo (Optional)")
-            
-            submit_tx = st.form_submit_button("Send Transaction")
-            
-            if submit_tx:
-                if not recipient:
-                    st.error("Please enter a recipient address")
-                elif amount <= 0:
-                    st.error("Amount must be greater than 0")
-                else:
-                    with st.spinner("Processing transaction... "):
-                        try:
-                            # Convert to smallest unit
-                            amount_in_smallest_unit = str(int(amount * 1_000_000))
-                            
-                            response = requests.post(
-                                f"{BACKEND_URL}/send-transaction",
-                                json={
-                                    "walletId": st.session_state.wallet_id,
-                                    "receiverAddress": recipient,
-                                    "amount": amount_in_smallest_unit,
-                                    "memo": memo
-                                }
-                            )
-                            
-                            if response.status_code == 200:
-                                data = response.json()
-                                st.success(f"Transaction sent! Hash: {data['transactionHash']}")
-                            else:
-                                error_data = response.json()
-                                st.error(f"Transaction failed: {error_data.get('message', 'Unknown error')}")
-                        except Exception as e:
-                            st.error(f"Error sending transaction: {str(e)}")
-    
+
+        if "warning_shown" not in st.session_state:
+            st.session_state.warning_shown = False
+            st.session_state.warning_message = ""
+            st.session_state.transaction_data = {}
+
+        if st.session_state.warning_shown:
+            st.warning(st.session_state.warning_message)
+
+            col1, col2 = st.columns(2)
+
+            with col1:
+                with st.form("cancel_form"):
+                    cancel_submit = st.form_submit_button("Cancel Transaction")
+                    if cancel_submit:
+                        st.session_state.warning_shown = False
+                        st.info("Transaction cancelled")
+                        st.rerun()
+
+            with col2:
+                with st.form("proceed_form"):
+                    proceed_submit = st.form_submit_button("Proceed Anyway")
+                    if proceed_submit:
+                        with st.spinner("Processing transaction with confirmation..."):
+                            try:
+                                transaction_data = st.session_state.transaction_data
+
+                                confirm_response = requests.post(
+                                    f"{BACKEND_URL}/send-transaction",
+                                    json={
+                                        "walletId": st.session_state.wallet_id,
+                                        "receiverAddress": transaction_data["receiverAddress"],
+                                        "amount": transaction_data["amount"],
+                                        "memo": transaction_data.get("memo", ""),
+                                        "bypassWarning": True
+                                    }
+                                )
+
+                                if confirm_response.status_code == 200:
+                                    data = confirm_response.json()
+                                    st.success(f"Transaction sent! Hash: {data['transactionHash']}")
+                                    st.session_state.warning_shown = False
+                                else:
+                                    error_data = confirm_response.json()
+                                    st.error(f"Transaction failed: {error_data.get('message', 'Unknown error')}")
+                            except Exception as e:
+                                st.error(f"Error sending transaction: {str(e)}")
+
+        else:
+            with st.form("send_form"):
+                recipient = st.text_input("Recipient Address")
+                amount = st.number_input("Amount (tDUST)", min_value=0.000001, value=1.0, step=0.1, format="%.6f")
+                memo = st.text_input("Memo (Optional)")
+
+                submit_tx = st.form_submit_button("Send Transaction")
+
+                if submit_tx:
+                    if not recipient:
+                        st.error("Please enter a recipient address")
+                    elif amount <= 0:
+                        st.error("Amount must be greater than 0")
+                    else:
+                        with st.spinner("Processing transaction... This may take up to a minute for ZK proof generation"):
+                            try:
+                                amount_in_smallest_unit = str(int(amount * 1_000_000))
+
+                                response = requests.post(
+                                    f"{BACKEND_URL}/send-transaction",
+                                    json={
+                                        "walletId": st.session_state.wallet_id,
+                                        "receiverAddress": recipient,
+                                        "amount": amount_in_smallest_unit,
+                                        "memo": memo,
+                                        "bypassWarning": False
+                                    }
+                                )
+
+                                if response.status_code == 400 and response.json().get("status") == "warning":
+                                    warning_data = response.json()
+                                    st.session_state.warning_shown = True
+                                    st.session_state.warning_message = warning_data["message"]
+                                    st.session_state.transaction_data = {
+                                        "receiverAddress": recipient,
+                                        "amount": amount_in_smallest_unit,
+                                        "memo": memo
+                                    }
+                                    st.rerun()
+                                elif response.status_code == 200:
+                                    data = response.json()
+                                    st.success(f"Transaction sent! Hash: {data['transactionHash']}")
+                                else:
+                                    error_data = response.json()
+                                    st.error(f"Transaction failed: {error_data.get('message', 'Unknown error')}")
+                            except Exception as e:
+                                st.error(f"Error sending transaction: {str(e)}")
+
     with tab2:
         st.header("Escrow Transactions")
 
@@ -572,6 +629,38 @@ if st.session_state.wallet_address:
                         st.error("Failed to create snapshot")
                 except Exception as e:
                     st.error(f"Error: {str(e)}")
+        with st.expander("Report Fraudulent Transaction"):
+            st.info("Use this form to report an address involved in a fraudulent transaction. This will add the address to our database of reported addresses, warning other users who attempt to send funds to this address.")
+
+            with st.form("report_fraud_form"):
+                reported_address = st.text_input("Fraudulent Address", placeholder="Enter Midnight wallet address")
+                reason = st.text_area("Reason for Report", placeholder="Briefly describe the fraudulent activity")
+
+                submit_report = st.form_submit_button("Submit Report")
+
+                if submit_report:
+                    if not reported_address:
+                        st.error("Please enter an address to report")
+                    
+                    else:
+                        with st.spinner("Submitting report..."):
+                            try:
+                                response = requests.post(
+                                    f"{BACKEND_URL}/report-address",
+                                    json={
+                                        "address": reported_address,
+                                        "reason": reason
+                                    }
+                                )
+
+                                if response.status_code == 200:
+                                    st.success("Address reported successfully!")
+                                    st.info("Other users will now be warned when attempting to send funds to this address.")
+                                else:
+                                    error_data = response.json()
+                                    st.error(f"Failed to report address: {error_data.get('message', 'Unknown error')}")
+                            except Exception as e:
+                                st.error(f"Error submitting report: {str(e)}")
 else:
     # Show welcome message if no wallet is connected
     st.info("👈 Please connect your Midnight wallet using the sidebar")

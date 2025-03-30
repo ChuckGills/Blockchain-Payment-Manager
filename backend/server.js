@@ -3,7 +3,11 @@ const express = require('express');
 const bodyParser = require('body-parser');
 const crypto = require('crypto');
 const { v4: uuidv4 } = require('uuid');
+const fs = require('fs');
+const path = require('path');
 
+
+const MAX_SAFE_TRANSACTION = 100000000;
 // We'll load the ES modules dynamically
 let WalletBuilder, NetworkId, nativeToken, SmartContract;
 
@@ -39,6 +43,17 @@ async function initModules() {
   console.log('Midnight wallet modules loaded successfully');
 }
 
+
+function loadReportedAddresses() {
+    try {
+      const reportedData = fs.readFileSync(path.join(__dirname, 'data/reported.txt'), 'utf8');
+      // Split the file by lines and remove any empty lines
+      return reportedData.split('\n').filter(line => line.trim() !== '');
+    } catch (error) {
+      console.error('Error loading reported addresses:', error);
+      // Return empty array if file doesn't exist or has other issues
+      return [];
+    }}
 // Initialize the server after modules are loaded
 async function startServer() {
   try {
@@ -221,59 +236,84 @@ app.get('/get-balance', async (req, res) => {
 });
 
 app.post('/send-transaction', async (req, res) => {
-  try {
-    const { walletId, receiverAddress, amount } = req.body;
-    
-    if (!walletId || !walletStore[walletId]) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Invalid wallet ID' 
-      });
-    }
-    
-    if (!receiverAddress) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Receiver address is required' 
-      });
-    }
-    
-    if (!amount || isNaN(Number(amount))) {
-      return res.status(400).json({ 
-        status: 'error', 
-        message: 'Valid amount is required' 
-      });
-    }
-    
-    const wallet = walletStore[walletId];
-    
-    const transferRecipe = await wallet.transferTransaction([
-      {
-        amount: BigInt(amount),
-        receiverAddress: receiverAddress,
-        type: nativeToken() 
+    try {
+      const { walletId, receiverAddress, amount, memo, bypassWarning } = req.body;
+      
+      if (!walletId || !walletStore[walletId]) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Invalid wallet ID' 
+        });
       }
-    ]);
-    
-    const provenTransaction = await wallet.proveTransaction(transferRecipe);
-    
-    const submittedTransaction = await wallet.submitTransaction(provenTransaction);
-    
-    res.json({
-      status: 'success',
-      transactionHash: submittedTransaction.hash,
-      message: 'Transaction submitted successfully'
-    });
-    
-  } catch (error) {
-    console.error('Error sending transaction:', error);
-    res.status(500).json({ 
-      status: 'error', 
-      message: error.message 
-    });
-  }
-});
-
+      
+      if (!receiverAddress) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Receiver address is required' 
+        });
+      }
+      
+      if (!amount || isNaN(Number(amount))) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Valid amount is required' 
+        });
+      }
+  
+      // Safety checks
+      const reportedAddresses = loadReportedAddresses();
+      const isAddressReported = reportedAddresses.includes(receiverAddress);
+      const isAmountAboveThreshold = BigInt(amount) > BigInt(MAX_SAFE_TRANSACTION);
+      
+      // If address is reported or amount is above threshold and bypassWarning isn't true
+      if ((isAddressReported || isAmountAboveThreshold) && !bypassWarning) {
+        let warningMessage = '';
+        
+        if (isAddressReported) {
+          warningMessage += 'This address has been reported for suspicious activity. ';
+        }
+        
+        if (isAmountAboveThreshold) {
+          warningMessage += `This transaction amount (${parseInt(amount)/1_000_000} tDUST) exceeds the recommended safe limit of ${MAX_SAFE_TRANSACTION/1_000_000} tDUST. `;
+        }
+        
+        warningMessage += 'Are you sure you want to proceed?';
+        
+        return res.status(400).json({
+          status: 'warning',
+          message: warningMessage,
+          requiresConfirmation: true
+        });
+      }
+      
+      const wallet = walletStore[walletId];
+      
+      const transferRecipe = await wallet.transferTransaction([
+        {
+          amount: BigInt(amount),
+          receiverAddress: receiverAddress,
+          type: nativeToken() 
+        }
+      ]);
+      
+      const provenTransaction = await wallet.proveTransaction(transferRecipe);
+      
+      const submittedTransaction = await wallet.submitTransaction(provenTransaction);
+      
+      res.json({
+        status: 'success',
+        transactionHash: submittedTransaction.hash,
+        message: 'Transaction submitted successfully'
+      });
+      
+    } catch (error) {
+      console.error('Error sending transaction:', error);
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
+      });
+    }
+  });
 app.get('/create-snapshot', async (req, res) => {
   try {
     const { walletId } = req.query;
@@ -1022,6 +1062,94 @@ app.post('/cancel-escrow', async (req, res) => {
     });
   }
 });
+
+
+const ensureDataDirExists = () => {
+    const dataDir = path.join(__dirname, 'data');
+    if (!fs.existsSync(dataDir)) {
+      fs.mkdirSync(dataDir, { recursive: true });
+      console.log('Created data directory');
+    }
+  };
+  
+  // Initialize data directory on startup
+  ensureDataDirExists();
+  
+  // Add endpoint to report fraudulent addresses
+  app.post('/report-address', async (req, res) => {
+    try {
+      const { address, reason } = req.body;
+      
+      if (!address) {
+        return res.status(400).json({ 
+          status: 'error', 
+          message: 'Address is required' 
+        });
+      }
+      
+   
+      
+      // Create data directory if it doesn't exist
+      ensureDataDirExists();
+      
+      const reportedFilePath = path.join(__dirname, 'data/reported.txt');
+      
+      // Load existing reported addresses
+      let reportedAddresses = [];
+      try {
+        if (fs.existsSync(reportedFilePath)) {
+          reportedAddresses = fs.readFileSync(reportedFilePath, 'utf8')
+            .split('\n')
+            .filter(line => line.trim() !== '');
+        }
+      } catch (readError) {
+        console.error('Error reading reported addresses file:', readError);
+      }
+      
+      // Check if address is already reported
+      if (reportedAddresses.includes(address)) {
+        return res.status(400).json({ 
+          status: 'warning', 
+          message: 'This address has already been reported' 
+        });
+      }
+      
+      // Add the new address to the list
+      reportedAddresses.push(address);
+      
+      // Save the updated list
+      try {
+        fs.writeFileSync(
+          reportedFilePath, 
+          reportedAddresses.join('\n'),
+          'utf8'
+        );
+        
+        // Optionally log the report with reason to a separate file
+        const reportsLogPath = path.join(__dirname, 'data/report_reasons.txt');
+        const logEntry = `${new Date().toISOString()} - ${address} - ${reason || 'No reason provided'}\n`;
+        
+        fs.appendFileSync(reportsLogPath, logEntry, 'utf8');
+        
+        console.log(`Address reported: ${address}`);
+        
+        res.json({
+          status: 'success',
+          message: 'Address reported successfully'
+        });
+      } catch (writeError) {
+        console.error('Error writing to reported addresses file:', writeError);
+        throw new Error('Failed to save reported address');
+      }
+      
+    } catch (error) {
+      console.error('Error reporting address:', error);
+      res.status(500).json({ 
+        status: 'error', 
+        message: error.message 
+      });
+    }
+  });
 
 // Start the server
 startServer();
