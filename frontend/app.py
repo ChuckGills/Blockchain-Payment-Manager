@@ -34,7 +34,7 @@ with st.sidebar:
     
     # Display connected wallet info if available
     if st.session_state.wallet_address:
-        st.success(f"Connected: {st.session_state.wallet_address[:10]}...{st.session_state.wallet_address[-6:]}")
+        st.success(f"Connected: {st.session_state.wallet_address}")
         
         # Get balance
         try:
@@ -86,7 +86,7 @@ with st.sidebar:
                     except Exception as e:
                         st.error(f"Error: {str(e)}")
                         
-        elif connection_option == "Connect with Seed":
+        elif connection_option == "Connect wallet":
             with st.form("seed_form"):
                 seed = st.text_input("Enter Seed Phrase", type="password")
                 submit = st.form_submit_button("Connect")
@@ -153,7 +153,7 @@ if st.session_state.wallet_address:
                 elif amount <= 0:
                     st.error("Amount must be greater than 0")
                 else:
-                    with st.spinner("Processing transaction... This may take up to a minute for ZK proof generation"):
+                    with st.spinner("Processing transaction... "):
                         try:
                             # Convert to smallest unit
                             amount_in_smallest_unit = str(int(amount * 1_000_000))
@@ -180,7 +180,7 @@ if st.session_state.wallet_address:
     with tab2:
         st.header("Escrow Transactions")
 
-        # Create subtabs
+        
         escrow_tabs = st.tabs(["Create Escrow", "My Escrows"])
 
         with escrow_tabs[0]:
@@ -190,9 +190,9 @@ if st.session_state.wallet_address:
             with st.form("escrow_form"):
                 recipient = st.text_input("Recipient Address")
                 amount = st.number_input("Amount (tDUST)", min_value=0.000001, value=1.0, step=0.1, format="%.6f")
-                # Optional arbiter address
-                use_arbiter = st.checkbox("Use Arbiter (for dispute resolution)")
-                arbiter = st.text_input("Arbiter Address (optional)", disabled=not use_arbiter)
+                
+                
+                arbiter = st.text_input("Arbiter Address ", )
                 memo = st.text_input("Memo/Notes (Optional)")
 
                 submit_escrow = st.form_submit_button("Create Escrow")
@@ -202,8 +202,7 @@ if st.session_state.wallet_address:
                         st.error("Please enter a recipient address")
                     elif amount <= 0:
                         st.error("Amount must be greater than 0")
-                    elif use_arbiter and not arbiter:
-                        st.error("Please enter an arbiter address or uncheck the arbiter option")
+                   
                     else:
                         with st.spinner("Creating escrow... This may take a minute"):
                             try:
@@ -217,8 +216,8 @@ if st.session_state.wallet_address:
                                     "memo": memo
                                 }
 
-                                if use_arbiter and arbiter:
-                                    payload["arbiterAddress"] = arbiter
+                                
+                                payload["arbiterAddress"] = arbiter
 
                                 response = requests.post(
                                     f"{BACKEND_URL}/create-escrow",
