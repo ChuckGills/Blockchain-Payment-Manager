@@ -436,31 +436,7 @@ app.post('/create-escrow', async (req, res) => {
     
     console.log(`Creating escrow contract for: ${senderAddress} -> ${receiverAddress}, amount: ${amount}`);
     
-    // Here you would deploy the actual escrow contract on Midnight
-    // The code would follow this pattern based on your smart contract:
-    
-    /*
-    // Example of deploying your Escrow contract on Midnight
-    // This is pseudocode as the actual implementation would depend on Midnight's API
-    
-    // Prepare contract bytecode and parameters
-    const escrowContractCode = `
-      // Compiled version of the Solidity contract provided
-    `;
-    
-    // Create contract deployment transaction
-    const deployTransaction = await wallet.createContractDeploymentTransaction({
-      code: escrowContractCode,
-      parameters: [receiverAddress, arbiterAddress || DEFAULT_ARBITER],
-      value: BigInt(amount)  // Fund the contract with the escrow amount
-    });
-    
-    const provenDeployTx = await wallet.proveTransaction(deployTransaction);
-    const submittedDeployTx = await wallet.submitTransaction(provenDeployTx);
-    
-    const contractAddress = submittedDeployTx.contractAddress;
-    const transactionHash = submittedDeployTx.hash;
-    */
+
     
     // For now, simulate contract deployment
     const contractAddress = 'mid1' + crypto.randomBytes(20).toString('hex');
@@ -533,13 +509,7 @@ app.get('/get-escrows', async (req, res) => {
       escrow => escrow[roleField] === userAddress
     );
     
-    // In a real implementation, you would query the blockchain:
-    /*
-    // Query Midnight network for relevant escrow contracts
-    const userEscrows = await queryMidnightEscrows({
-      [roleField]: userAddress
-    });
-    */
+  
     
     res.json({
       status: 'success',
@@ -629,7 +599,6 @@ app.post('/approve-escrow', async (req, res) => {
     
     
     
-    // For now, simulate the approval
     const approveTransactionHash = 'approve_' + crypto.randomBytes(32).toString('hex');
     
     // Update escrow status
@@ -689,7 +658,6 @@ app.post('/release-escrow', async (req, res) => {
     
     await statePromise;
     
-    // Verify user is the buyer or seller (either can trigger release per your contract)
     if (escrow.buyer !== userAddress && escrow.seller !== userAddress) {
       return res.status(403).json({ 
         status: 'error', 
@@ -697,7 +665,6 @@ app.post('/release-escrow', async (req, res) => {
       });
     }
     
-    // Check if escrow can be released
     if (escrow.fundsReleased) {
       return res.status(400).json({ 
         status: 'error', 
@@ -721,10 +688,8 @@ app.post('/release-escrow', async (req, res) => {
     
  
     
-    // For now, simulate the release
     const releaseTransactionHash = 'release_' + crypto.randomBytes(32).toString('hex');
     
-    // Update escrow status
     escrowStore[escrowId].fundsReleased = true;
     escrowStore[escrowId].releasedAt = new Date().toISOString();
     
@@ -929,7 +894,6 @@ app.post('/resolve-dispute', async (req, res) => {
   }
 });
 
-// Get pending escrows
 app.get('/get-pending-escrows', async (req, res) => {
   try {
     const { walletId } = req.query;
@@ -943,7 +907,6 @@ app.get('/get-pending-escrows', async (req, res) => {
     
     const wallet = walletStore[walletId];
     
-    // Get wallet address
     let userAddress;
     const statePromise = new Promise(resolve => {
       const subscription = wallet.state().subscribe(state => {
@@ -957,7 +920,7 @@ app.get('/get-pending-escrows', async (req, res) => {
 
 await statePromise;
     
-    // Find all pending escrows where this user is the sender (buyer)
+    
     const pendingEscrows = Object.values(escrowStore).filter(
       escrow => (
         escrow.buyer === userAddress && 
@@ -982,7 +945,7 @@ await statePromise;
   }
 });
 
-// Cancel an escrow (only the buyer/sender can cancel)
+// Cancel an escrow 
 app.post('/cancel-escrow', async (req, res) => {
   try {
     const { walletId, escrowId } = req.body;
@@ -1004,7 +967,7 @@ app.post('/cancel-escrow', async (req, res) => {
     const wallet = walletStore[walletId];
     const escrow = escrowStore[escrowId];
     
-    // Get wallet address
+    // Get wallet addr
     let userAddress;
     const statePromise = new Promise(resolve => {
       const subscription = wallet.state().subscribe(state => {
@@ -1016,7 +979,6 @@ app.post('/cancel-escrow', async (req, res) => {
     
     await statePromise;
     
-    // Only the buyer can cancel (in this simplified implementation)
     if (escrow.buyer !== userAddress) {
       return res.status(403).json({ 
         status: 'error', 
@@ -1024,7 +986,6 @@ app.post('/cancel-escrow', async (req, res) => {
       });
     }
     
-    // Check if the escrow is still active
     if (escrow.fundsReleased) {
       return res.status(400).json({ 
         status: 'error', 
@@ -1040,10 +1001,8 @@ app.post('/cancel-escrow', async (req, res) => {
     }
     
 
-    // For now, simulate cancellation
     const cancelTransactionHash = 'cancel_' + crypto.randomBytes(32).toString('hex');
     
-    // Update escrow in registry
     escrowStore[escrowId].status = 'Cancelled';
     escrowStore[escrowId].cancelledAt = new Date().toISOString();
     
@@ -1063,7 +1022,7 @@ app.post('/cancel-escrow', async (req, res) => {
   }
 });
 
-
+//ensures directory exist
 const ensureDataDirExists = () => {
     const dataDir = path.join(__dirname, 'data');
     if (!fs.existsSync(dataDir)) {
@@ -1072,10 +1031,8 @@ const ensureDataDirExists = () => {
     }
   };
   
-  // Initialize data directory on startup
   ensureDataDirExists();
   
-  // Add endpoint to report fraudulent addresses
   app.post('/report-address', async (req, res) => {
     try {
       const { address, reason } = req.body;

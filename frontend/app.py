@@ -352,7 +352,6 @@ if st.session_state.wallet_address:
                                     col1, col2, col3 = st.columns(3)
 
                                     with col1:
-                                        # Approve button (disabled if already approved)
                                         approve_disabled = escrow['buyerApproved'] or escrow['fundsReleased']
                                         if st.button("Approve", key=f"approve_buyer_{escrow['id']}", 
                                                     disabled=approve_disabled):
@@ -401,7 +400,6 @@ if st.session_state.wallet_address:
                                                     st.error(f"Error: {str(e)}")
 
                                     with col3:
-                                        # Dispute button (disabled if already in dispute or released)
                                         dispute_disabled = escrow['disputeRaised'] or escrow['fundsReleased']
                                         if st.button("Raise Dispute", key=f"dispute_buyer_{escrow['id']}", 
                                                    disabled=dispute_disabled):
@@ -434,7 +432,6 @@ if st.session_state.wallet_address:
             with role_tabs[1]:
                 st.subheader("Escrows Where You Are the Seller")
 
-                # Fetch escrows where user is seller
                 try:
                     response = requests.get(
                         f"{BACKEND_URL}/get-escrows",
@@ -447,7 +444,6 @@ if st.session_state.wallet_address:
                         if escrows:
                             for escrow in escrows:
                                 with st.container():
-                                    # Display basic escrow information
                                     st.markdown(f"**Escrow ID:** {escrow['id']}")
                                     st.markdown(f"**Buyer:** {escrow['buyer']}")
                                     st.markdown(f"**Amount:** {int(escrow['amount'])/1_000_000} tDUST")
@@ -457,7 +453,7 @@ if st.session_state.wallet_address:
                                     if escrow.get('memo'):
                                         st.markdown(f"**Memo:** {escrow['memo']}")
 
-                                    # Display status
+                                    
                                     status_color = "red"
                                     if escrow['fundsReleased']:
                                         status = "Funds Released"
@@ -483,7 +479,6 @@ if st.session_state.wallet_address:
                                     col1, col2 = st.columns(2)
 
                                     with col1:
-                                        # Approve button (disabled if already approved)
                                         approve_disabled = escrow['sellerApproved'] or escrow['fundsReleased']
                                         if st.button("Approve", key=f"approve_seller_{escrow['id']}", 
                                                     disabled=approve_disabled):
@@ -508,7 +503,6 @@ if st.session_state.wallet_address:
                                                     st.error(f"Error: {str(e)}")
 
                                     with col2:
-                                        # Dispute button (disabled if already in dispute or released)
                                         dispute_disabled = escrow['disputeRaised'] or escrow['fundsReleased']
                                         if st.button("Raise Dispute", key=f"dispute_seller_{escrow['id']}", 
                                                    disabled=dispute_disabled):
@@ -662,7 +656,7 @@ if st.session_state.wallet_address:
                             except Exception as e:
                                 st.error(f"Error submitting report: {str(e)}")
 else:
-    # Show welcome message if no wallet is connected
+   
     st.info("👈 Please connect your Midnight wallet using the sidebar")
     st.markdown("""
     ## Welcome to the Midnight Wallet Dashboard
